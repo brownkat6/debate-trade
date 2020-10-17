@@ -1,5 +1,6 @@
 <?php
 
+//Listen for whenever the post rating is manipulated by user
 function ct_js_ratings_header() {
     ?>
             <script type="text/javascript"> window.onload=addRatingEventListener;</script>
@@ -7,6 +8,7 @@ function ct_js_ratings_header() {
 }
 add_action('wp_head', 'ct_js_ratings_header');
 
+//return the current average rating for the current post
 function get_current_user_post_rating($post_id){
 	$current_user = get_current_user_id();
 	$rating_list = get_post_meta($post_id, "ratings_list",true);
@@ -26,6 +28,8 @@ function get_current_user_post_rating($post_id){
 //AJAX hook:
 add_action('wp_ajax_update_post_rating_meta', 'ct_update_post_rating_meta');
 
+//Update ratings_avg and ratings_list meta for author of current rated post
+//Update ratings_avg and ratings_list meta for current rated post
 function ct_update_post_rating_meta($useless){
 	if(get_current_user_id()==0){
 		return;
@@ -41,9 +45,8 @@ function ct_update_post_rating_meta($useless){
 		error_log("ct_update_post_rating_meta where num_stars = " . $num_stars . " for post " . $post_id);
 
 		//update user meta with total list of ratings
-		//need to change to hash map so rating from each user corresponds to user id
 		$current_post_ratings_list = get_post_meta($post_id, "ratings_list",true);
-		//array_push($current_post_ratings_list, $num_stars);
+	    
 		//if rating from $current_user exists, update it with new rating.
 		//otherwise, add new entry to associative array with key -> $current_user and value -> $num_stars
 		if(sizeof($current_post_ratings_list) < 1 || $current_post_ratings_list == null){
@@ -52,31 +55,15 @@ function ct_update_post_rating_meta($useless){
 		}
 		if(array_key_exists ( $current_user , $current_post_ratings_list )){
 			$current_post_ratings_list[$current_user] = $num_stars;
-			/**
-			foreach($current_post_ratings_list as $key => $value){
-				if($key == $current_user){
-					error_log("update_post_rating_meta post_rating before update = " . $current_post_ratings_list[$key]);
-					$current_post_ratings_list[$key] = $num_stars;//im unsure this will work
-					error_log("update_post_rating_meta post_rating after update = " . $current_post_ratings_list[$key]);
-				}
-			}*/
 		}else{
 			error_log("ct_update_post_rating_meta adding rating of " . $num_stars . " from " . $current_user);
-			//$current_post_ratings_list += [$current_user => $num_stars];
 			$current_post_ratings_list[$current_user] = $num_stars;
 			error_log("new rating from current_user = " . $num_stars);
 		}
-		//ISSUE: it takes whatever value is given and truncates it for no raisin. And, it only adds the value instead of mapping it to the key
-		//$current_post_ratings_list[$user_id] = $num_stars;
 		update_post_meta($post_id, "ratings_list", $current_post_ratings_list);
 
 		//update post meta with average rating score
 		$total_post_rating = array_sum($current_post_ratings_list);
-		//the code below was commented out because for some reason the $post_rating(s) were being added as strings rather than integers
-		/**foreach($current_post_ratings_list as $post_rating_key => $post_rating){
-			$total_post_rating .= $post_rating;
-			error_log("update_post_rating_meta add post_rating with value " . $post_rating . " of type " . gettype($post_rating));
-		}*/
 		$avg_post_rating = $total_post_rating / sizeof($current_post_ratings_list);
 		$avg_post_rating = round($avg_post_rating, 1);
 		update_post_meta($post_id, "ratings_avg", $avg_post_rating);
@@ -93,33 +80,21 @@ function ct_update_post_rating_meta($useless){
 		$ratings_key = $post_id . " " . $current_user;
 		if(array_key_exists ( $ratings_key , $current_user_ratings_list )){
 			$current_user_ratings_list[$ratings_key] = $num_stars;
-			/**
-			foreach($current_user_ratings_list as $key => $value){
-				if($key == $post_id){
-					//error_log("update_post_rating_meta post_rating before update = " . $current_user_ratings_list[$key]);
-					$current_user_ratings_list[$key] = $num_stars;//im unsure this will work
-					//error_log("update_post_rating_meta post_rating after update = " . $current_user_ratings_list[$key]);
-				}
-			}*/
 		}else{
 			$current_user_ratings_list[$ratings_key] = $num_stars;
 		}
 
-		//delete_user_meta($current_user, "ratings_list");
 		update_user_meta($post_author, "ratings_list", $current_user_ratings_list);
 
 		//update user meta with average rating score
 		$total_rating = array_sum($current_user_ratings_list);
-		/**foreach($current_user_ratings_list as $user_rating){
-			$total_rating .= $user_rating;
-		}*/
 		$avg_rating = $total_rating / sizeof($current_user_ratings_list);
 		$avg_rating = round($avg_rating, 1);
-		//delete_user_meta($current_user, "ratings_avg");
 		update_user_meta($post_author, "ratings_avg", $avg_rating);
 	}
 }
 
+//Return the average of every rating of every post authored by the given user
 function get_user_rating_avg($user_id){
 	$avg_meta = get_user_meta($user_id, "ratings_avg",true);
 	if($avg_meta == null){
@@ -127,9 +102,9 @@ function get_user_rating_avg($user_id){
 	}else{
 		return round($avg_meta,1);
 	}
-	//error_log("get_user_rating_avg" . $avg . gettype($avg));
 }
 
+//Return the number of ratings other users have given to the given user
 function get_user_num_ratings($user_id){
 	$meta_array = get_user_meta($user_id, "ratings_list",true);
 	if($meta_array == null){
@@ -139,6 +114,7 @@ function get_user_num_ratings($user_id){
 	}
 }
 
+//Return the average of all ratings given to the given post
 function get_post_rating_avg($post_id){
 	$avg_meta = get_post_meta($post_id, "ratings_avg",true);
 	if($avg_meta == null){
@@ -148,6 +124,7 @@ function get_post_rating_avg($post_id){
 	}
 }
 
+//Return the number of ratings assigned to the given post
 function get_post_num_ratings($post_id){
 	$meta_array = get_post_meta($post_id, "ratings_list",true);
 	if($meta_array == null){
@@ -157,6 +134,7 @@ function get_post_num_ratings($post_id){
 	}
 }
 
+//Return HTML/CSS code to create the average and current user's ratings for the given post
 function make_both_ratings($num_half_stars, $num_ratings, $post_id){
 	$num_read_only_half_stars = get_post_rating_avg($post_id) * 2;
 	$read_only_stars = make_stars($num_read_only_half_stars, "-" . $post_id);
@@ -171,6 +149,7 @@ function make_both_ratings($num_half_stars, $num_ratings, $post_id){
 	return $stars_table;
 }
 
+//Return HTML/CSS code to create the table version of the average ratings for the given post
 function make_stars_in_table($num_half_stars, $num_ratings, $post_id){
 	$stars = make_stars($num_half_stars, "-" . $post_id);
 	$num_ratings_formatted = "(" . $num_ratings . ")";
@@ -180,6 +159,7 @@ function make_stars_in_table($num_half_stars, $num_ratings, $post_id){
 	return $stars_table;
 }
 
+//Return the HTML/CSS code to display the given rating for the given post
 function make_stars($num_half_stars, $post_id){
 	//$rating_image = wp_review_get_rating_image();
 	$rating_value = (int)$num_half_stars * 10; //conversion factor;
@@ -192,10 +172,6 @@ function make_stars($num_half_stars, $post_id){
 	$rating_icon = $rating_image;
 	$post_id_fore = (string)$post_id . "fore";
 	
-	/**#ct_num_ratings{
-	position: relative;
-	margin-right:50px;
-	}*/
 	$content = "
 <style type=\"text/css\">
 <!--
@@ -225,20 +201,11 @@ div.ct_rating_foreground {
 -->
 </style>
 ";
-	//$rating_formatted = $num_ratings;
-	//error_log($rating_formatted);
-	//issue: \"$string_formatted\" shows up on the page as "" 
-	
-	//$content .= "<div class = \"innerwrapper\" id=\"ct_num_ratings\">$rating_formatted</div>
 	$content .= "<div class = \"innerwrapper\" </div>
 	<div class=\"ct_rating_background\" id=\"$post_id\">
 <div class = \"ct_rating_foreground\" id=\"$post_id_fore\" style=\"width:" . $rating_value . "px\"></div>
 </div>";
-	/**$content .= "<div class = \"innerwrapper\" </div>
-	<div class=\"ct_rating_background\" id=\"$post_id\">
-<div class = \"ct_rating_foreground\" id=\"$post_id_fore\"></div><div id=\"ct_num_ratings\">$rating_formatted</div>
-</div>";*/
-	/**
+
 <div class="review-result-wrapper"<?php if ( $inactive_color ) echo " style=\"color: {$inactive_color};\""; 
 	<?php
 		for ( $i = 1; $i <= 5; $i++ ) :
@@ -267,14 +234,15 @@ div.ct_rating_foreground {
 				}
 			endfor;
 			?>
-		</div><!-- .review-result -->
+		</div>
 	</div>
 	*/
 	return $content;
 }
 
 
-// define the bbp_get_reply_author_id callback 
+//Modify the name of the author everywhere on the site to also include their average user rating
+//This function renames the author in the context of "topic" type posts
 function filter_bbp_get_topic_author_display_name( $wptexturize, $topic_id ) { 
     // make filter magic happen here... 
     //$author_id = bbp_get_topic_author_id();//get_the_author_meta("ID");
@@ -294,7 +262,8 @@ function filter_bbp_get_topic_author_display_name( $wptexturize, $topic_id ) {
 // add the filter 
 add_filter( 'bbp_get_topic_author_display_name', 'filter_bbp_get_topic_author_display_name', 10, 2 ); 
 
-// define the bbp_get_reply_author_id callback 
+//Modify the name of the author everywhere on the site to also include their average user rating
+//This function renames the author in the context of "reply" type posts
 function filter_bbp_get_reply_author_display_name( $wptexturize, $topic_id) { 
     // make filter magic happen here... 
     $author_id = bbp_get_topic_author_id( $topic_id );
@@ -326,7 +295,8 @@ add_filter( 'bbp_get_reply_author_display_name', 'filter_bbp_get_reply_author_di
 
 
 // define the bbp_get_topic_title callback 
-
+//Add the average post rating to the name of each topic
+//Rendered inactive to reduce site clutter
 function filter_bbp_get_topic_title( $title, $topic_id ) { 
     /**
 	$num_stars = get_post_rating_avg($topic_id);
