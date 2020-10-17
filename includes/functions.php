@@ -1,21 +1,7 @@
 <?php
-//6/5/19 todo: 
 
-// -- to do this, need an AJAX call, to 'post' or 'get' to send the offer ID to the server php.
-// 2) write PHP code to hook into the ninja form field and populate offer response based on offer_id 
-// 3) The button that causes ajax to set the session variable offer ID should next load response to offer form, ideally in a new tab.  After the $_SESSION variable ['offer_id'] is set, then load the offer response form in a new window. This will call all the PHP hooks server-side
-//   ignore this for now: this could be via ajax -- https://developer.ninjaforms.com/codex/loading-the-form-via-ajax/
-
-//The following security code prevents activation, so disabled:
-//if ( ! defined( 'ABSPATH') ) exit; //prevent malicious calls
-//
-//Create new db tables if needed
-
+//Setup tradeoffers table that stores every trade offer and related metadata
 function install() {
-	//if (!function_exists('maybe_create_table')) {
-        // require_once ABSPATH . 'wp-admin/install-helper.php';
- 	//}
-	
 	global $wpdb;
 	$table_name = $wpdb->prefix . "tradeoffers";
 	$charset_collate = $wpdb->get_charset_collate();
@@ -42,7 +28,6 @@ function install() {
  
     	// Didn't find it try to create it..
     	$wpdb->query($create_ddl);
-	//$result = maybe_create_table ($table_name, $sql);
 	// We cannot directly tell that whether this succeeded!
 	    if ( $wpdb->get_var( $query ) == $table_name ) {
       	  	return true;
@@ -62,7 +47,7 @@ else
 		session_start();
 	}
 }
-//session_start(); // necessary to use $_SESSION
+
 install();
 
 function mylog($txt) {
@@ -84,8 +69,8 @@ add_action( 'wp_enqueue_scripts', 'cardtrade_custom_script_load' );
 
 //add_action( 'plugins_loaded', 'enqueue_ct_scripts' );
 
+//Setup jQuery update scripts
 function cardtrade_custom_script_load(){
-  //wp_register_script( 'ct-script', plugins_url( 'cardtrade_respond.js', __FILE__ ), array('jquery'), null, true );
   wp_enqueue_script( 'cardtrade-js', plugins_url( 'cardtrade.js', __FILE__ ), array('jquery'));
   wp_enqueue_script( 'ct-script',  plugins_url( 'cardtrade_respond.js', __FILE__ ), array('jquery', 'cardtrade-js'));
 	
@@ -99,9 +84,6 @@ function cardtrade_custom_script_load(){
 			 	'site_url' => site_url() ,
 				'nonce' => wp_create_nonce('ajax-nonce') ));
 	
-  //wp_register_script( 'cardtrade-js', plugins_url( 'cardtrade.js', __FILE__ ), array('jquery'), null, true);	
-
-
 }
 
 // AJAX hooks
@@ -109,6 +91,8 @@ add_action('wp_ajax_respond_to_offer',  'ct_respond_to_offer');
 add_action('wp_ajax_unblock_user', 'ct_unblock_user');
 add_action('wp_ajax_view_past_trade', 'ct_view_past_trade');
 
+//Set Session variable to store the trade id
+//Used for the View Past Trades page to populate the past trades data
 function ct_view_past_trade($useless){
 	error_log("ct_view_past_trade");
 	$nonce = $_POST['nonce'];
@@ -120,6 +104,7 @@ function ct_view_past_trade($useless){
 	}
 }
 
+//Set session variable to store the id of the current trade offer for the user to respond to
 function ct_respond_to_offer($useless){
 	$nonce = $_POST['nonce'];
     if (1) { //(wp_verify_nonce( $nonce, 'ajax-nonce' ) ) {
@@ -129,6 +114,8 @@ function ct_respond_to_offer($useless){
 	}
 }
 
+//Return whether the user has permissions to make a trade for this post
+//Return false if post authoer has blocked current user
 function ct_is_user_blocked($useless){
 		$topic_id = sanitize_text_field($_POST['topic_id']);
 		$current_user = get_current_user_id();
@@ -142,6 +129,8 @@ function ct_is_user_blocked($useless){
 		return false;
 }
 
+//Return whether the user has permissions to make a trade for this post
+//Return false if post authoer has blocked current user
 function ct_is_user_blocked_php($topic_id){
 	$current_user = get_current_user_id();
 	$user_being_accessed = bbp_get_topic_author_id( $topic_id );
@@ -156,9 +145,10 @@ function ct_is_user_blocked_php($topic_id){
 	return false;
 }
 
+//Update user metadata to remove post author from the current user's "blocked" list
 function ct_unblock_user($useless){
 	$nonce = $_POST['nonce'];
-    if (1) { //(wp_verify_nonce( $nonce, 'ajax-nonce' ) ) {
+    if (1) {
 		//remove current_user_id from $user_id's blocked list
 		$user_id = sanitize_text_field($_POST['blockedID_post']);
 		$current_user = get_current_user_id();
@@ -171,13 +161,9 @@ function ct_unblock_user($useless){
 		for($i = 0; $i < count($blocked_by_list); $i++){
 			if($blocked_by_list[$i] == $current_user || $blocked_by_list[$i] == (string)$current_user){
 				unset($blocked_by_list[$i]);
-				//$i = $i-1;
-				//$blocked_by_list = array_splice($blocked_by_list,$i,1);
 			}
 		}
 		add_user_meta($user_id, "blocked_by_list", $blocked_by_list);
-		//error_log("new blocked_by_list: " . count($blocked_by_list) . $blocked_by_list[0]);
-		//error_log("user meta after adding new meta: " . current(get_user_meta($user_id, "blocked_by_list")));
 
 		$blocked_list = get_user_meta($current_user, "blocked_list", true);
 		delete_user_meta($current_user, "blocked_list");
@@ -194,6 +180,7 @@ function ct_unblock_user($useless){
 
 /**
  * Debugging below:
+ * Send error messages to _temp_out.txt error file
 */
 define('temp_file', ABSPATH.'/_temp_out.txt' );
 
@@ -218,15 +205,15 @@ function pre_output1($action){
 
 
 // the add_action('save_post', ...) function will receive a $_POST[] variable with the submitted form info from the post.  This can be parsed and saved to the database.
-// BUT how to render the html in the first place?? What function/hook?
 add_action('save_post', 'cardtrade_add_topic_meta');
 
+//When post is created, add post metadata to database
 function cardtrade_add_topic_meta( $post_id ) { //, $post, $update ) {
 
 	/**
 		Do bunch of checks on the $_POST variable, get data, and pack it into $var_to_save
 
-		Assume $_POST has a variable called "isVisibleToAll", etc. which will be set up earlier
+		Assume $_POST has a variable called "isVisibleToAll", etc. which is set up earlier
 	*/
 	
 	//If there was a request for access to restricted topics, process that here
@@ -254,58 +241,12 @@ function cardtrade_add_topic_meta( $post_id ) { //, $post, $update ) {
 	return true;
 }
 
-//the function below is currently unused
-/**
-function cardtrade_get_topic_meta( $post_id) {
-	$visibility_info = get_post_meta($post_id, $key = '_cardtrade_visibility', $single = true);
-	
-	$visibility_info_array = explode(" ", $visibility_info);
-	
-	$isVisibleToAll = $visibility_info_array[0];
-	$isVisibleToFriends = $visibility_info_array[1];
-	$length_of_visibility_info_array = sizeof($visibility_info_array);
-	$UserArrayString = array();
-	for ($i = 2; $i < $length_of_visibility_info_array; $i++){
-		array_push($UserArrayString, $visibility_info_array[i]);
-	}
-}
+/*Hijack post rendering
+ *If current user is author of current post, show post and average rating
+ *else if current user has access to current post, show post, average rating, and option for current user to rate the post
+ *else if current user is blocked by post author, inform user they have been blocked
+ *else if current user does not have access, show average rating and button allowing user to make a trade offer
 */
-
-/**
-	Code below will add a filter to hijack rendering topics and go all Gandolph on it
-*/
-/** Currently not used:
- 											
-function cardtrade_filter_topic ($topic, $output = OBJECT, $filter = 'raw') { // WP_Post object is arg //, $output, $filter) {
- //mess with the topic content
-
-	//$topic->post_content_filtered = $topic->post_content;
-	
-	if ( $output === ARRAY_A ) {
-		$topic[ "post_content" ] = "You shall not pass! [ARRAY_A]"; 
-		$topic[ "post_content_filtered" ] = "You shall not pass! [ARRAY_A, filtered]";
-		//func_doesnt_exist_array();
-
-	} elseif ( $output === OBJECT ) { 
-		//$post_id = $topic->ID;
-		//$post_meta = get_post_meta($topic->ID, '_cardtrade_visibility', true);
-		//$post_author = $topic->post_author;
-		//$post_content = $topic->post_content;
-		$topic->post_content = "You shall not pass! [OBJECT]"; 
-		$topic->post_content_filtered = "You shall not pass [OBJECT, filtered]!";
-		//func_doesnt_exist_object();
-	}
-
-	//func_doesnt_exist();
-  return $topic;
-}
-
-//Note:  bbpress v2.5.14: Bbpress/includes/topics/template.php:557 -- filter may never be reached. EDITED BBPRESS code to fix!!! (but apparently irrelevant anyway)
-add_filter( 'bbp_get_topic', 'cardtrade_filter_topic' );
-*/
-
-//The above bbp_get_topic seems useless.  The bbp_get_reply_content function below works.
-
 function cardtrade_filter_reply ($post_content, $reply_id) {
 	//If post is user's own, show visibility
 	if(get_current_user_id()==0){
@@ -350,24 +291,18 @@ function cardtrade_filter_reply ($post_content, $reply_id) {
 		$new_content .= "\r\n Would you like to rate the topic?";
 		$new_content .= make_both_ratings($num_half_stars, get_post_num_ratings($sane_reply_id), $sane_reply_id);
 	} else {
-		//replace with access request...
+		//Replace with access request
 		//see https://stackoverflow.com/questions/25186140/how-to-use-post-in-wordpress
 		if(ct_is_user_blocked_php($sane_reply_id)){
 			$new_content = "<p>Sorry, that user has blocked you from trading and you don't have access to their posts.</p>";
 		}else{
-			//$new_content = "You shall not pass!  [cardtrade_filter_reply] " . $the_post->ID . "=post_id";
 			$new_content = 'Sorry, you dont have access. ';
 			$other_user_id = get_post_field( 'post_author', $sane_reply_id );
 			$want = bp_get_profile_field_data( array(
 			  'field' => "Want ",
 			  'user_id' => $other_user_id
-			  //'profile_group_id' => 1
 			) );
 			$other_user_name = get_the_author_meta('display_name', $other_user_id);
-			//$new_content .= " The author, $other_user_name, wants: " . $want . "&nbsp;&nbsp;";
-			//$new_content .= do_shortcode("[popup_trigger id="card_offer" tag="button" custom_id=]Make Trade Offer[/popup_trigger]");
-			//$new_content .= "$p_short ";
-			//$new_content .= do_shortcode("$p_short");
 			$new_content .= $button_code;
 
 			//add link to ask author a question -- 8/22/19 JWB
@@ -375,15 +310,6 @@ function cardtrade_filter_reply ($post_content, $reply_id) {
 			$author_login_name = strtolower(get_the_author_meta('user_login', $other_user_id));
 			$post_permalink = get_post_permalink($reply_id);
 			$author_msg_link = site_url() . "/members/$my_login_name/messages/compose/?r=" . $author_login_name;
-			/**
-			$msg_link = "<style type=\"text/css\"> .button_clear {border:none !important; background-color:#FFFFFF !important ; color:blue !important; } ";
-			$msg_link .= " .button_clear:hover{ color:blue !important; } </style> ";
-			$msg_link .= "<form action=\"$author_msg_link\" method=\"post\"> ";
-			$msg_link .= "<input type=\"hidden\" name=\"subject\" value=\"Question re your post $reply_id\" /> ";
-			$msg_link .= "<input type=\"hidden\" name=\"content\" value=\"I have a question about " . $post_permalink . ":\"> ";
-			$msg_link .= "<input type=\"submit\" value=\"Ask a question\" class=\"button_clear\" /> </form>";
-			//$new_content .=" or " .$msg_link;
-			*/
 			$new_content .="<p> or <a href=\"$author_msg_link\">click here to ask a question.</a></p>";
 
 			$new_content .= make_stars_in_table(get_post_rating_avg($sane_reply_id) * 2, get_post_num_ratings($sane_reply_id), $sane_reply_id);
@@ -407,17 +333,11 @@ add_filter( 'ninja_forms_render_options', 'cardtrade_render_form', 10, 2);
 //add_filter('ninja_forms_display_fields', 'cardtrade_render_form');
 //add_filter('ninja_forms_display_form_settings', 'cardtrade_render_form');
 
+//Hijack Ninja Forms form rendering for "Make Trade Offer", "Respond to Trade Offer" forms
+// Dynamically populate field here with user's available topics to offer...
+// Populate offered and requested posts based on Session Variable storing current offer id
+//First, get list of topics owned by user
 function cardtrade_render_form($options, $settings) {
-	// $_SESSION['offerID'] = 28;
-	// https://developer.ninjaforms.com/codex/forms/
-	// https://developer.ninjaforms.com/codex/dynamic-field-settings/
-	// https://developer.ninjaforms.com/codex/dynamic-list-fields/
-	// First get the template form
-	//$nf = Ninja_Forms()->form( 2 )->get();
-	// Dynamically populate field here with user's available topics to offer...
-	
-	//First, get list of topics owned by user
-	
 	//if ( $form_id == 2) {  //update make_offer form
 	/******************************************
 * SHOW ALL topics IN FIELD WITH KEY "offered_cards"
@@ -435,7 +355,7 @@ function cardtrade_render_form($options, $settings) {
 		   'date_query' => array(
 				//'after' => $past_date
 				array(
-        		 'after'     => '6 months ago',  // or '-2 days'
+        		 'after'     => '6 months ago',
         		 'inclusive' => true,
      			), 
 			  )
@@ -455,15 +375,14 @@ function cardtrade_render_form($options, $settings) {
    }
 	if($settings['key'] == 'counter_offered_list_taken'){
 		//populate with all posts authored by the other user
-		//TODO: maybe only show posts published within last year or other span of time
 		if (!(array_key_exists('offerID', $_SESSION))) {return $options;}
 		$offerID = $_SESSION['offerID'];
 		
+		//Query database based on current offer id to get ids of requestor and recipient users
 		global $wpdb;
 		$table_name = $wpdb->prefix . "tradeoffers";
 		$result_row = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table_name WHERE offer_id = %d",
 												   $offerID));
-		//$result_row = $wpdb->get_results ( "SELECT * FROM $table_name WHERE offer_id = $offerID" );
 		foreach($result_row as $row){
 			//error_log(gettype($row));
 			foreach($row as $key=>$value)
@@ -484,10 +403,7 @@ function cardtrade_render_form($options, $settings) {
 		}else{
 			$other_user_id = $recipient_id;
 		}
-		//error_log("other user id: " . $other_user_id);
-		//query for all posts by $other_user_id
 		$author_array = array($other_user_id);
-	    //$author_array = array_push($author_array, $other_user_id);
 		$args = array(
            'post_type' => 'topic',
 		   'author__in' => $author_array,
@@ -553,8 +469,6 @@ function cardtrade_render_form($options, $settings) {
 			$post = get_post($offer_id);
 			
 			$label_val = ct_get_post_title_with_breadcrumbs($post->ID, true);
-			//$label_val = get_the_title($offer_id);
-			//$label_val .= " ($offer_id)";
 			$options[] = array('label' => $label_val, 'value' => $offer_id);//need to know if $options[] statement still works while not in wonky loop used for above population of multi-select
 		     }
 		 }
@@ -566,17 +480,12 @@ function cardtrade_render_form($options, $settings) {
 		error_log("cardtrade_render_form() pending_offers called!");
 		$random_val = array();
 		error_log("test variable: " . empty($random_val));
-		//$offerID = $_SESSION['offerID'];
-		//if(empty($offerID)) {$offerID=-1;}
 		
 		global $wpdb;
 		$table_name = $wpdb->prefix . "tradeoffers";
 		$user_id = get_current_user_id();
 		$result = $wpdb->get_results ( $wpdb->prepare("SELECT offer_id FROM %s WHERE pending_user_id = %d", array($table_name, $user_id)), ARRAY_A);
-		//error_log("cardtrade_render_form() pending_offers result = " . $result);
-		
-		//$offer_id_array = explode(',', $result);
-		//error_log("cardtrade_render_form() pending_offers offer_id_array = " . $offer_id_array);
+
 		$is_result_empty = empty($result);
 		error_log("cardtrade_render_form() pending_offers result = " . implode(', ', $result) . "sizeof result = " . sizeof($result) . ". Result is empty: " . $is_result_empty);
 		foreach($result as $offer_id){
@@ -601,7 +510,6 @@ function cardtrade_render_form($options, $settings) {
 				}
 				
 				if($isUnresolvedOffer){
-					//$result2 = $wpdb->get_results ( "SELECT * FROM $table_name WHERE offer_id = $offer",ARRAY_A );
 					$result2 = $wpdb->get_results ( "SELECT recipient_id FROM $table_name WHERE offer_id = $offer",ARRAY_A );
 					error_log("type of result2 variable: " . gettype($result2));
 					$recipient_id = (int)current($result2); //current($arr) returns first value in array
@@ -670,7 +578,7 @@ function cardtrade_render_form($options, $settings) {
 }
 
 /**param $post_id is the id of the post you need the title for
- * param $shorten is true if you want the post title to be 20 characters or under, false if you don't care about length]
+ * param $shorten is true if you want the post title to be 20 characters or under, false if you don't care about length
  * function returns the post title along with the forum(s) it belongs in
 */
 function ct_get_post_title_with_breadcrumbs($post_id, $shorten){
@@ -698,11 +606,8 @@ function ct_get_post_title_with_breadcrumbs($post_id, $shorten){
 						   $post_parent_id = null;
 					   }
 					   
-					   //echo $post_parent_id_object;
-					   //echo gettype($post_parent_id) . $post_parent_id . gettype($post_parent_id_object) . " " . (int)$post_parent_id_object;
 				   }
 			   if ($post_parent_id != null) {
-				   //$post_parent = $post_parent->post_parent;
 				   
 			  		 while ($post_parent_id != null && (int)$post_parent_id != 0) {
 						 $breadcrumb_val = get_the_title($post_parent_id) . " > " . $breadcrumb_val; 
@@ -732,6 +637,7 @@ function ct_get_post_title_with_breadcrumbs($post_id, $shorten){
 	return $label_val;
 }
 
+//Dynamically set offer id in Ninja Form based on current Session Variable offerID
 add_filter('ninja_forms_localize_field_hidden', 'cardtrade_set_hidden');
 function cardtrade_set_hidden($field){
 	//error_log("cardtrade_set_hidden called");
@@ -739,10 +645,8 @@ function cardtrade_set_hidden($field){
 	if($settings['key'] == 'hidden_offer_id'){
 		if (!(array_key_exists('offerID', $_SESSION))) {return $field;}
 		$offerID = $_SESSION['offerID'];
-		//error_log("offerID before callback: " . $offerID);
 		$field['settings']['default'] = $offerID;
 	}
-	//error_log($field);
 	return $field;
 }
 
@@ -752,10 +656,8 @@ function cardtrade_set_options($field){
 	return $field;
 }
 
-//add_filter( 'ninja_forms_display_form_settings', 'cardtrade_set_forms', 10, 2);
-//add_filter('ninja_forms_render_options_textarea', 'cardtrade_set_text', 10, 2);
-//THIS WORKS - dynamically change fields with 'localize' function
 
+//Dynamically change ninja form fields with 'localize' function
 add_filter('ninja_forms_localize_field_number','cardtrade_set_number', 10, 1);
 function cardtrade_set_number($field){
 	//error_log("cardtrade_set_number called");
@@ -836,11 +738,11 @@ function cardtrade_set_number($field){
 }
 
 add_filter('ninja_forms_localize_field_textarea','cardtrade_set_offertext', 10, 1);
+//Dynamically update ninja form text field to offer a text description of the offer to the user
 function cardtrade_set_offertext($field) {
 	//>>> change all the form settings here...
 	$settings=$field['settings'];
-	if (!(array_key_exists('offerID', $_SESSION))) { //could be the suggestion form
-		//$field['settings'][ 'default' ] = "Enter communication here";
+	if (!(array_key_exists('offerID', $_SESSION))) { 
 		return $field;
 	}
 	if (!(array_key_exists('offerID', $_SESSION))){
@@ -895,13 +797,11 @@ function cardtrade_set_offertext($field) {
 		}
 		if($requestor_id == $current_user_id){
 			$num_allowed = $num_requestor_posts;
-			//$num_wanted = $num_recipient_posts;
 			$current_requested_list = $offered_list;
 			$current_offered_list = $requested_list;
 			$other_user_id = $recipient_id;
 		}else{
 			$num_allowed = $num_recipient_posts;
-			//$num_wanted = $num_requestor_posts;
 			$current_requested_list = $requested_list;
 			$current_offered_list = $offered_list;
 			$other_user_id = $requestor_id;
@@ -928,7 +828,6 @@ function cardtrade_set_offertext($field) {
 				$message .= "&#9;" . $label_val . "\r\n";
 			}
 		}
-		//$want = "the best constructive ever";
 		$want = bp_get_profile_field_data( array(
 		  'field' => "Want ",
 		  'user_id' => $other_user_id
@@ -948,27 +847,23 @@ function cardtrade_set_offertext($field) {
 		wp_reset_postdata();
 
 		
-		//unset($field['default']);
-		//unset($field['placeholder']);
 		$field['settings'][ 'default' ] = $message;
-		//$field['settings'][ 'placeholder' ] = 'This is a fire drill - placeholder';
-		//var_dump($field);
 	}
-	//var_dump($field); //note $settings['options'] is NULL!
 	return $field;
 }
 
+//Verify form setting functionality
 function cardtrade_set_forms($settings, $form_id) {
 	//>>> change all the form settings here...
-	if (1) { //(($settings['key'] == 'description_of_offer') && ($form_id == 3)) {
+	if (1) { 
 		$settings['value'] = 'This is a fire drill 2';
 	}
-	//var_dump($settings); //note $settings['options'] is NULL!
 	return $settings;
 }
 
-
+//Return whether current user has access to given post
 function cardtrade_is_visible($post_id) {
+	//Is given post visible to everyone?
 	global $bp;
 	if (get_post_meta($post_id, 'isVisibleAll', true)==true) {return true;}
 	
@@ -988,10 +883,7 @@ function cardtrade_is_visible($post_id) {
 	//still no? Then is the user_id in the access_list?
 	$visible_list = get_post_meta($post_id, 'isVisibleList', true); //
 	$visible_list_array=explode(',', $visible_list);
-	//$len = sizeof($visible_list_array);
-	//for ($i = 0; $i < $len; $i++){
-	//	if ($the_user == $visible_list_array[i]) {return true; }
-	//}
+
 	foreach ($visible_list_array as $item) {
 		if ($the_user == $item) { return true;}
 	}
@@ -1017,21 +909,20 @@ add_action('my_ninja_forms_response', 'my_ninja_forms_response_callback');
 add_action( 'my_ninja_forms_offer', 'my_ninja_forms_offer_callback' );
 function my_ninja_forms_offer_callback( $form_data ){ //process offer
 	global $wpdb;
-	//('/var/www/html/cardtrade/cardtrade-errors.log', 'my_ninja_forms_offer_callback was called');
+	
 	error_log("my_ninja_forms_offer_callback() called!");
-	//error_log("Write this error down to a file!", 3, "/var/www/html/cardtrade/cardtrade-errors.log");
-	//$_SESSION['errors_galore2'] = 'ninja_forms_offer_callback';
+	
     $form_id       = $form_data[ 'form_id' ];
     $form_fields   =  $form_data[ 'fields' ];
     foreach( $form_fields as $field ){
-        // Example Field Key comparison
+        
         if( 'hidden_requested_topic_2' == $field[ 'key' ] ){
-            // This is the field that you are looking for.
+            
             $requested_topic_id = $field [ 'value' ];
         }
 		if( 'card_offered' == $field[ 'key' ]) {
 			$offered_list = implode(',', $field['value']);
-			//file_put_contents('php://stderr', print_r($offered_list, TRUE));
+			
 			mylog('Cards offered: ' . $offered_list);
 		}
 		if('number_of_cards_offered' == $field['key']){
@@ -1041,19 +932,16 @@ function my_ninja_forms_offer_callback( $form_data ){ //process offer
 			}
 		}
     }
-	//$requested_topic =bbp_get_topic($requested_topic_id);
 	
 	$recipient_id = bbp_get_topic_author_id($requested_topic_id);
 	error_log("requested_topic_id: " . $recipient_id . ", " . $requested_topic_id);
 	if ($recipient_id ===null) error_log('Error: my_ninja_forms_offer_callback(): recipient_id is NULL');
 	
-	//file_put_contents('/var/www/html/cardtrade/cardtrade-errors.log', print_r($recipient_id, TRUE));
 	
     $form_settings = $form_data[ 'settings' ];
     $form_title    = $form_data[ 'settings' ][ 'title' ];
-	// now insert the new offer into the tradeoffer table
-	// 
-	// 
+	// Insert the new offer into the tradeoffer table
+	
 	$wpdb->insert('cardtrade_tradeoffers', array (
 		'last_update' => current_time('mysql'),
 		'init_time' => current_time('mysql'),
@@ -1081,18 +969,17 @@ function my_ninja_forms_offer_callback( $form_data ){ //process offer
         ) );
     }
 	
-	// 6/9/19 - send private message to offer recipient, using BuddyPress message function
+	// Send private message to offer recipient, using BuddyPress message function
 	$message = "You have a trade request from " . bp_core_get_user_displayname(get_current_user_id());
-	//$message .= '<p  onclick = "cardtrade_setSessionOfferID($insert_id)"> Click here to respond</p>'; not needed because you can't put links in messages
 	
 	$args = array( 'recipients' => $recipient_id, 'sender_id' => get_current_user_id(), 'subject' => 'You have a trade offer', 'content' => $message );
 	messages_new_message( $args );
 }
 
+//Prepopulate number of cards offered/desired based on database queries
 function my_ninja_forms_response_callback( $form_data ){ //process offer
 	global $wpdb;
-	//TODO: prepopulate number of cards offered/desired based on database queries
-	//TODO: if status != 1 or 2 then don't process anything
+	//if status != 1 or 2 then don't process anything
 	error_log("my_ninja_forms_response_callback called");
     $form_id       = $form_data[ 'form_id' ];
 
@@ -1111,7 +998,6 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 			if($offer_id == null){
 				return;
 			}
-			//error_log("offer id = " . $offer_id);
         }
 		if( 'response' == $field[ 'key' ] ){
             $response = $field['value'];
@@ -1132,14 +1018,10 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 				}
 			}
         }
-		/**if( 'counter_num_posts_taken' == $field[ 'key' ] ){
-            $counter_num_posts_taken = $field['value'];
-        }*/
 		if( 'counter_num_posts_given' == $field[ 'key' ] ){
             $counter_num_posts_given = $field['value'];
         }
 	}
-	//$offer_id = 42;
 	error_log("response = " . $response);
 	
 	$current_user_id = get_current_user_id();
@@ -1219,9 +1101,9 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 	}
 
 	if(strcmp($response, "accept") == 0){
-		//TODO: if user did not fill out acceptlist give error and make them resubmit the form
-		//user accepts offer
-		//change status to accepted
+		//If user did not fill out acceptlist give error and make them resubmit the form
+		//User accepts offer, so change status to accepted
+		
 		if($status == "offer_made"){
 			$new_status = recipient_accept;
 		}else{
@@ -1260,7 +1142,7 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 		$past_trades_requestor[] = $offer_id;
 		update_user_meta($requestor_id, "past_trades", $past_trades_requestor);
 		
-		//TODO: only give user access to each post if they already don't have access and only add that $post_id if it hasn't already been added
+		//Only give user access to each post if they already don't have access and only add that $post_id if it hasn't already been added
 		//then give recipient_id user access to posts in offered_list
 		$offered_list_array = explode(",",$offered_list);
 		$current_user_past_traded_posts_list = get_user_meta($recipient_id, "past_traded_posts",true);
@@ -1299,13 +1181,12 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 			update_post_meta( $post_id, "isVisibleList", $current_access_list);
 			
 			//meta "past_traded_posts" is an associative array with key=post_id and value=trade_offer_id
-			//fixed bug 8/12/19 JWB: array index was missing "$post_id" below (it was empty instead)
 			$current_other_user_past_traded_posts_list[$post_id] = $offer_id;
 		}
 		
 		update_user_meta($requestor_id, "past_traded_posts", $current_other_user_past_traded_posts_list);
 
-		//Get addresses to share google docs with
+		//Give addresses to share google docs with
 		$user_gmail_addr = bp_get_profile_field_data( array(
 			  'field' => "Gmail_address ",
 			  'user_id' => $current_user_id
@@ -1331,17 +1212,7 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 		$message2 .= " (If you are using google docs, be sure to share them with your trade partner's gmail address " . $user_gmail_addr .")";
 		$subject2 = 'Your trade was accepted';
 		
-		// 8/11/19  JWB - notify users by email too
-		// NOTE: THIS IS UNNECESSARY BELOW, B/C WORDPRESS SENDS EMAILS WHEN INTERNAL MESSAGES ARE SENT TO A USER!!!
-/*
-	$current_user = wp_get_current_user();
-	mylog ("Emailing " . $current_user->user_email . " Subject: " . $subject . " Msg: " .$message ." Gmail:" . $other_gmail_addr );
-	$email_result = wp_mail($current_user->user_email, $subject, $message . " If you are using google docs, be sure to share them with your trade partner's gmail address " . $other_gmail_addr);
-	mylog ($email_result);
-	
-	$other_user = get_user_by('id', $other_user_id);
-	wp_mail($other_user->user_email, $subject2, $message2 . " If you are using google docs, be sure to share them with your trade partner's gmail address " . $user_gmail_addr);
-		*/
+
 	}elseif(strcmp($response, "counter") == 0){
 		//user makes counter offer
 		//uses $counter_offered_list_taken, $counter_num_posts_given
@@ -1368,12 +1239,7 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 				    SET number_of_cards_offered_to_recipient = %s 
         	   		WHERE offer_id = %s",$counter_num_posts_given, $offer_id));
 			}
-			/**if($counter_num_posts_taken != null){
-				//update requested_list in database
-				$wpdb->query( $wpdb->prepare("UPDATE $table_name 
-				    SET number_of_cards_offered_to_requestor = %s 
-        	   		WHERE offer_id = %s",$counter_num_posts_taken, $offer_id));
-			}*/
+			
 		}else{
 			//'offered_list' = $counter_offered_list_taken
 				//update offered_list in database
@@ -1387,12 +1253,7 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 				$wpdb->query( $wpdb->prepare("UPDATE $table_name 
 				    SET number_of_cards_offered_to_recipient = %s 
         	   		WHERE offer_id = %s",sizeof($counter_offered_list_given), $offer_id));
-			/**if($counter_num_posts_taken != null){
-				//update requested_list in database
-				$wpdb->query( $wpdb->prepare("UPDATE $table_name 
-				    SET number_of_cards_offered_to_recipient = %s 
-        	   		WHERE offer_id = %s",$counter_num_posts_taken, $offer_id));
-			}*/
+			
 			if($counter_num_posts_given != null){
 				//update requested_list in database
 				$wpdb->query( $wpdb->prepare("UPDATE $table_name 
@@ -1453,10 +1314,8 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 				//error_log("blocked_meta: " . current(get_user_meta($id_to_be_blocked, "blocked_by_list")));
 
 				$current_block_others_list = get_user_meta($current_user_id, "blocked_list",true);
-				//delete_user_meta($current_user_id, "blocked_list");
-				//if($sizeof($current_block_other))
-				//TODO: add check to see if meta exists or not, determines whether to update or add meta. use: metadata_exists('user',$user_id,'blocked_list')
-				//array_push($current_block_others_list, $id_to_be_blocked);
+				//Check to see if meta exists or not, determines whether to update or add meta. use: metadata_exists('user',$user_id,'blocked_list')
+				
 				if($current_block_others_list == null){
 					$current_block_others_list = array($id_to_be_blocked);
 				}else{
@@ -1466,12 +1325,11 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 				error_log("new user blocked: ". $current_block_others_list[0]);
 				update_user_meta($current_user_id, "blocked_list", $current_block_others_list);
 
-				//TODO: The reject messages could be set to the subject and message variables that are finally sent at the end of the function
+				//The reject messages are set to the subject and message variables that are finally sent at the end of the function
 				//message users about the blocking
 				$reject_message = "You were blocked from trading with " . bp_core_get_user_displayname($current_user_id);
 				$reject_subject = 'You were blocked';
 				$reject_message2 = "You blocked " . bp_core_get_user_displayname($other_user_id) . ". ";
-				//$reject_message2 .= 'Click your profile icon to unblock them.';
 				$reject_subject2 = 'You blocked someone.';
 				$reject_subject2 = 'Click the Blocked Users bar at the profile icon.';
 				$args = array( 'recipients' => $other_user_id, 'sender_id' => $current_user_id, 'subject' => $reject_subject, 'content' => $reject_message );
@@ -1547,10 +1405,10 @@ function my_ninja_forms_response_callback( $form_data ){ //process offer
 }
 
 //-------------------
-// Try making custom rendering of offer list: (JB 6/25/19)
-// Labeled "Pending Offers" on the site
+// Make custom rendering of offer list:
+// Labeled "Pending Offers" page on the site
 function cardtrade_get_offer_list( $args ){
-	//echo "This is a test " . " and another test";
+	//If current user not logged in, show nothing
 	if(get_current_user_id() == 0){
 		echo "<p>Sorry, you need to be logged in to view pending offers.</p>";
 		return;
@@ -1564,15 +1422,11 @@ function cardtrade_get_offer_list( $args ){
 		$table_name = $wpdb->prefix . "tradeoffers";
 		$user_id = get_current_user_id();
 		$result = $wpdb->get_results( "SELECT offer_id FROM $table_name WHERE pending_user_id =$user_id ORDER BY offer_id DESC",ARRAY_A);
-		//$result = $wpdb->query( $wpdb->prepare( "SELECT offer_id FROM $table_name WHERE pending_user_id =%d ",$user_id),ARRAY_A);
-		//error_log("cardtrade_render_form() pending_offers result = " . $result);
 		
-		//$offer_id_array = explode(',', $result);
-		//error_log("cardtrade_render_form() pending_offers offer_id_array = " . $offer_id_array);
 		$is_result_empty = empty($result);
-		//error_log("cardtrade_render_form() pending_offers result = " . implode(', ', $result) . "sizeof result = " . sizeof($result) . ". Result is empty: " . $is_result_empty);
+		
 		foreach($result as $offer_id_array){
-			//foreach loop inside foreach loop gets the correct offerid!!!!!!
+			//foreach loop inside foreach loop gets the correct offerid
 			//creates new array that converts string offer_id's into int offer_id's
 			$offer_id_array_int = array();
 			foreach($offer_id_array as $offer_id_int){
@@ -1595,36 +1449,24 @@ function cardtrade_get_offer_list( $args ){
 				}
 				
 				if($isUnresolvedOffer){
-					//var_dump($offer);
-					//$result2 = $wpdb->get_results ( "SELECT * FROM $table_name WHERE offer_id = $offer",ARRAY_A );
 					$result2 = $wpdb->get_results( $wpdb->prepare( "SELECT recipient_id FROM $table_name WHERE offer_id = %d",$offer),ARRAY_A );
-					//echo var_dump($result2);
-					//error_log("type of result2 variable: " . gettype($result2));
 					foreach($result2 as $recipient_array){
 						foreach($recipient_array as $recipient){
 							$recipient_id = $recipient;
 						}
 					}
-					//echo var_dump($recipient_id);
-					//$recipient_id = (int)current($result2); //current($arr) returns first value in array
-					//error_log("recipient_id = " . gettype($recipient_id) . " " . $recipient_id);
+					
 					$result4= $wpdb->get_results( $wpdb->prepare( "SELECT requestor_id FROM $table_name WHERE offer_id = %d",$offer),ARRAY_A );
 					foreach($result4 as $requestor_id_array){
 						foreach($requestor_id_array as $requestor_id_in_loop){
 							$requestor_id = $requestor_id_in_loop;
 						}
 					}
-					//var_dump($requestor_id);
-					//error_log("cardtrade_render_form() pending_offers offered_list = " . implode(',',$result2->offered_list) . "sizeof result = " . sizeof($result2));
 					$is_result2_empty = empty($result2);
-					//error_log("result2 is empty: " . $is_result2_empty);
-					//$mylink->link_id
 					$titles_string = "";
 					if(!empty($recipient_id)){
-						//if($result2->recipient_id == $user_id){
 						if($recipient_id == $user_id){
-							//error_log("cardtrade_render_form() pending_offers recipient_id == user_id");
-							//should show offered_list
+							//Show offered_list
 							//create separate third database call for now
 							$result3=$wpdb->get_results($wpdb->prepare( "SELECT offered_list FROM $table_name WHERE offer_id = %d",$offer),ARRAY_A);
 						}else{
@@ -1637,7 +1479,7 @@ function cardtrade_get_offer_list( $args ){
 									$offered_list_string = $offered_string;
 								}
 							}
-							//$offered_list_string = (string)current($result3); //current($arr) returns first value in array
+							//$offered_list_string = (string)current($result3);
 							$ids_array = array_filter(explode(",", $offered_list_string));
 							$num_titles = 0;
 							while($num_titles < 3 && $num_titles < sizeof($ids_array)){
@@ -1652,7 +1494,7 @@ function cardtrade_get_offer_list( $args ){
 									$titles_string .= substr($label_val, 0, 20) . ", ";
 								}
 								$num_titles = $num_titles + 1;
-							//error_log("label_val = " . $label_val . " titles string: " . $titles_string);
+							
 							}
 							if($titles_string == ""){
 								$titles_string .= "Nothing";
@@ -1663,11 +1505,10 @@ function cardtrade_get_offer_list( $args ){
 								$titles_string .= "...";
 							}
 
-						//$options[] = array('label' => $titles_string, 'value' => $offer);
+						
 					$targ_page = site_url() . "/respond-to-trade-offer?offerID=$offer" ;
 						$titles_string = sanitize_text_field($titles_string);
 					echo "<tr>   <td>$titles_string</td> ";
-					//echo "<td> <button onclick=\"window.open(' $targ_page')\"> Respond to $offer </button></td>";
 					echo "<td> <button onclick=\"cardtrade_setSessionOfferID($offer)\"> Respond </button></td>";
 					
 					if(get_current_user_id() == $recipient_id){
@@ -1675,18 +1516,13 @@ function cardtrade_get_offer_list( $args ){
 					}else{
 						$other_user_id = (int)$recipient_id;
 					}
-					//var_dump($other_user_id);
-						//$username = bp_core_get_user_displayname($other_user_id);
-						$username = strtolower(get_userdata($other_user_id)->user_login);
-						//var_dump($username);
-					//error_log("other user id: " . $username);
-					//$user_url = get_author_posts_url( $other_user_id);
+					
+					$username = strtolower(get_userdata($other_user_id)->user_login);
+						
 					$user_url = bp_core_get_user_domain( $other_user_id ) . "profile";
-					//$url_val = site_url();
-					//echo"<td> $username</td>";
-						echo "<td> <a href = \"" . site_url() . "/members/$username/profile/\"> $username </a></td>";
-						//echo "<td><a href = \"$user_url\">" . "test" . $recipient_id . $username . "</a></td>";
-						//echo "<td> <button onclick=\"cardtrade_setSessionOfferID($offer)\"> $username</button></td>";
+					
+					echo "<td> <a href = \"" . site_url() . "/members/$username/profile/\"> $username </a></td>";
+						
 					$rating = round((double)get_user_rating_avg($other_user_id), 1);
 					$num_ratings = "(" . (int)get_user_num_ratings($other_user_id) . ")";
 					$stars = make_stars($rating * 2, $num_ratings, -1);//-1 means that this rating is read-only
@@ -1703,7 +1539,7 @@ function cardtrade_get_offer_list( $args ){
 	echo "</table></font>";
 }
 
-//Page Past Trades
+//Create Page "Past Trades"
 function cardtrade_get_past_trades_list( $args ){
 	if(get_current_user_id()==0){
 		echo "Sorry, you must be logged in to view this page.";
@@ -1711,17 +1547,14 @@ function cardtrade_get_past_trades_list( $args ){
 	}
 	$past_trades_array = get_user_meta(get_current_user_id(), "past_traded_posts",true);
 	echo "<font size=\"4\"><table> <tr>   <th>Post</th>     <th>Date</th> <th>Post Author</th> <th>Trade Number</tr>";
-	//if (is_array($past_trades_array)) $past_trades = array_keys($past_trades_array);
-	//Katrina doesn't know what the below 2 lines are supposed to be doing and they are effectively rendered useless by using the $past_trades_array
 	if (is_string($past_trades_array)) {wp_parse_str($past_trades_array, $past_trades);}
 	else {$past_trades = $past_trades_array;}
 	
-	//Need to sort table rows by date. That's complicated so the next best thing is sorting them in descending order by trade_id.
+	//Need to sort table rows by date. To do so, sort them in descending order by trade_id.
 	arsort($past_trades);
 	
 	foreach(array_keys($past_trades) as $post_id){
 		//get the title of the post obtained, with breadcrumbs
-		//$label_val = get_the_title($post_id);
 		if($post_id != ""){
 			$label_val = ct_get_post_title_with_breadcrumbs($post_id, true);
 		}else{
@@ -1765,14 +1598,14 @@ function cardtrade_get_past_trades_list( $args ){
 	echo "</table></font>";
 }
 
-//Page Blocked Users
+//Create Page "Blocked Users"
 function cardtrade_get_blocked_users_list( $args ){
 	if(get_current_user_id()==0){
 		echo "Sorry, you must be logged in to view this page.";
 		return;
 	}
 	$blocked_user_ids_array = get_user_meta(get_current_user_id(), "blocked_list",true);
-	//error_log("cardtrade_get_blocked_users_list " . sizeof($blocked_user_ids_array));
+	
 	echo "<style type=\"text/css\"> #rating_stars_be_vertical{vertical-align: top !important; width: 110px !important;} #num_ratings_align_left{ text-align: left !important; vertical-align: top !important; width: 20px !important;}</style>";
 	echo "<font size=\"4\"><table> <tr>   <th>Username</th> <th>Rating</th><th> </th> <th>Unblock</th> </tr>";
 	if (!empty($blocked_user_ids_array)) {
@@ -1797,13 +1630,13 @@ function cardtrade_get_blocked_users_list( $args ){
 	echo "</table></font>";
 }
 	
-//generate Reputations page
+//Create Page "Reputations"
 function cardtrade_get_reputations($args){
 	if(get_current_user_id()==0){
 		echo "Sorry, you must be logged in to view this page.";
 		return;
 	}
-	//should show: username, number of trades, rating
+	//Show: username, number of trades, rating
 	echo "<style type=\"text/css\"> #rating_stars_be_vertical{vertical-align: top !important; width: 110px !important;} #num_ratings_align_left{ text-align: left !important; vertical-align: top !important; width: 20px !important;}</style>";
 	echo "<font size=\"4\"><table><tr><th>User</th><th>Total Trades</th><th>Rating</th><th> </th></tr>";
 	
@@ -1817,7 +1650,6 @@ function cardtrade_get_reputations($args){
 
 	$user_query = new WP_User_Query( $args );
 	$users = $user_query->get_results();
-	//question: is $users full of user objects or user ids? currently assuming its user ids
 	
 	foreach($users as $user_object){
 		$user_id = $user_object->ID;
@@ -1831,7 +1663,7 @@ function cardtrade_get_reputations($args){
 		
 		$stars = make_stars($rating_avg * 2,  -1);//-1 means that this rating is read-only
 		
-		//TODO: find number of unique values in associative array of past_traded_posts. Alternatively, create new user meta that tracks past trade ids
+		//Find number of unique values in associative array of past_traded_posts
 		$num_trades = sizeof(get_user_meta($user_id, "past_trades", true));
 		
 		echo "<tr><td><a href = \"$user_url\">$username</a></td>";
@@ -1842,6 +1674,7 @@ function cardtrade_get_reputations($args){
 	echo "</table></font>";
 }
 
+//Create "View Past Trades" Page that user is redirected toward
 function cardtrade_view_past_trade($args){
 	if(get_current_user_id()==0){
 		echo "Sorry, you must be logged in to view this page.";
@@ -1912,7 +1745,7 @@ function cardtrade_view_past_trade($args){
 	$readable_date = strtotime($sql_date);
 	$readable_date = date("m/d/y", $readable_date);
 	
-	//$user_url = get_author_posts_url( $other_user_id);
+	
 	$user_url = site_url() . "/members/" . $user_info->user_login . "/profile/";
 	$message .= "You traded with <a href = \"$user_url\">" . $user_info->user_login . "</a> on " . $readable_date . ". <p>";
 	
@@ -1921,7 +1754,6 @@ function cardtrade_view_past_trade($args){
 			$num_wanted = sizeof($offered_id_array);
 			$message .= $user_info->user_login . " obtained " . $num_wanted . " of your posts:" . "<br>";
 			foreach($offered_id_array as $offered_id){
-				//error_log("offered post id = " . $offered_id);
 				$label_val = get_the_title($offered_id);
 				$post_url = get_permalink($offered_id);
 				$message .= "&nbsp;&nbsp;&nbsp;&nbsp;<a href = \"$post_url\">" . $label_val . "</a><br>";
@@ -1953,6 +1785,7 @@ function cardtrade_view_past_trade($args){
 	wp_reset_postdata();
 }
 
+//Create button to unblock user
 function cardtrade_get_unblock_user_button($args){
 	$author_id = 1;
 	//$author_id = bbp_get_topic_author_id();
@@ -1969,7 +1802,7 @@ function cardtrade_get_unblock_user_button($args){
 	}
 }
 
-//NOTE: we might be trying wayyyyyyy too hard
+//Remove unnecessary BP user profile pages
 add_action('bp_setup_nav', 'remove_user_profile_pages', 100 );
 function remove_user_profile_pages(){
 
@@ -2033,40 +1866,16 @@ mylog('Called ct_bbp_get_user_profile_url ' . $url);
 }
 add_filter('bbp_get_user_profile_url', 'ct_bbp_get_user_profile_url', 10, 3);
 
+//fix bbp user profile urls
 function ct_bbp_pre_get_user_profile_url($user_id) {
-/*
-//echo var_dump($user_id);
-mylog('Called  ct_bbp_pre_get_user_profile_url ' . $user_id);
-	$user_obj = get_userdata($user_id);
-	$login_name = $user_obj->user_login;
-mylog('Called ct_bbp_pre_get_user_profile_url ' . $login_name);
-	$retval = trailingslashit(site_url()) . 'members/' . $login_name . '/profile';
-mylog('Called ct_bbp_pre_get_uer_profile_url ' . $retval . ' ' . esc_url($retval));	
-	//return $retval;
-*/
 	return trailingslashit($user_id) .'profile';
 }
 add_filter('bbp_pre_get_user_profile_url','ct_bbp_pre_get_user_profile_url', 20, 1);
-
-/*
-function ct_bbp_get_topic_author_link($author_link, $args) {
-        $url = trailingslashit($author_link);
-        if (substr($url, -8, 7) != 'profile') { $url .= 'profile--';}
-//mylog('Called user_profile_url ' . $url);
-	return $url;
-}
-add_filter('bbp_get_topic_author_link', 'ct_bbp_get_topic_author_link', 10, 2);
-*/
 
 add_action('bbp_theme_before_reply_form_notices','ct_theme_before_reply_form');
 function ct_theme_before_reply_form() {
 	echo "<style type=\"text/css\"> p.vis {color: #bb3300 !important; font-size: small !important;} </style> <p class=\"vis\"> [This is a comment that EVERYONE will be able to see] </p>";
 
 }
-/*
-add_action('bp_get_email','ct_bp_get_email');
-function ct_bp_get_email(&$args) {
-	
-}
-*/
+
 ?>
