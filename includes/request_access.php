@@ -6,6 +6,7 @@
 
 <?php
 	$message = "You requested to trade!";
+	/* Show popup window after the Ninja Form for making a trade offer has been completed by the user*/
 ?>
 
 <script>
